@@ -66,6 +66,7 @@ type ZMachine struct {
 	stack      *ZStack
 	localFrame uint16
 	Done       bool
+	startState string
 }
 
 type ZFunction func(*ZMachine, []uint16, uint16)
@@ -697,12 +698,12 @@ func ZPull(zm *ZMachine, args []uint16, numArgs uint16) {
 
 func ZNOP_VAR(zm *ZMachine, args []uint16, numArgs uint16) {
 	fmt.Printf("IP=0x%X\n", zm.ip)
-	panic("NOP VAR")
+	//panic("NOP VAR")
 }
 
 func ZNOP(zm *ZMachine, args []uint16) {
 	fmt.Printf("IP=0x%X\n", zm.ip)
-	panic("NOP 2OP")
+	//panic("NOP 2OP")
 }
 
 func GenericBranch(zm *ZMachine, conditionSatisfied bool) {
@@ -999,7 +1000,7 @@ func ZJump(zm *ZMachine, arg uint16) {
 
 func ZNOP1(zm *ZMachine, arg uint16) {
 	fmt.Printf("IP=0x%X\n", zm.ip)
-	panic("NOP1")
+	ZReturnFalse(zm)
 }
 
 func ZReturnTrue(zm *ZMachine) {
@@ -1020,6 +1021,12 @@ func ZPrintRet(zm *ZMachine) {
 	ZRet(zm, 1)
 }
 
+func ZRestart(zm *ZMachine) {
+	startState := zm.startState
+	zm.Deserialize(zm.startState)
+	zm.startState = startState
+}
+
 func ZRetPopped(zm *ZMachine) {
 	retValue := zm.stack.Pop()
 	ZRet(zm, retValue)
@@ -1038,7 +1045,7 @@ func ZNewLine(zm *ZMachine) {
 }
 
 func ZNOP0(zm *ZMachine) {
-	panic("NOP0")
+	ZReturnFalse(zm)
 }
 
 var ZFunctions_VAR = []ZFunction{
@@ -1109,7 +1116,7 @@ var ZFunctions_0P = []ZFunction0Op{
 	ZNOP0,
 	ZNOP0,
 	ZNOP0,
-	ZNOP0,
+	ZRestart,
 	ZRetPopped,
 	ZPop,
 	ZQuit,
@@ -1342,8 +1349,7 @@ func (zm *ZMachine) Initialize(buffer []uint8, header ZHeader) {
 	zm.header = header
 	zm.ip = uint32(header.ip)
 	zm.stack = NewStack()
-
-	//zm.TestDictionary()
+	zm.startState = zm.Serialize()
 }
 
 type SerializableHeader struct {
@@ -1370,6 +1376,7 @@ type ZMSerializer struct {
 	Stack      SerializableStack  `json:"stack"`
 	LocalFrame uint16             `json:"local_frame"`
 	Done       bool               `json:"done"`
+	StartState string             `json:"start_state"`
 }
 
 func (zm *ZMachine) Serialize() string {
@@ -1393,6 +1400,7 @@ func (zm *ZMachine) Serialize() string {
 		},
 		LocalFrame: zm.localFrame,
 		Done:       zm.Done,
+		StartState: zm.startState,
 	}
 	bytes, _ := json.Marshal(serializer)
 	return string(bytes)
@@ -1423,6 +1431,7 @@ func (zm *ZMachine) Deserialize(s string) {
 	}
 	zm.localFrame = sz.LocalFrame
 	zm.Done = sz.Done
+	zm.startState = sz.StartState
 }
 
 // Return DICT_NOT_FOUND (= 0) if not found
