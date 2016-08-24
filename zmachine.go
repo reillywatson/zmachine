@@ -1368,17 +1368,21 @@ func (zm *ZMachine) EncodeText(txt string) uint32 {
 }
 
 func (zm *ZMachine) Initialize(buffer []uint8, header ZHeader) {
-	zm.buf = buffer
-	zm.header = header
-	zm.ip = uint32(header.ip)
-	zm.stack = NewStack()
-	zm.startState = zm.Serialize()
+	zm.SetState(buffer, header)
 	zm.TextGetter = func(fn func(string)) {
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
 		fn(input)
 	}
 	zm.Output = os.Stdout
+}
+
+func (zm *ZMachine) SetState(buffer []uint8, header ZHeader) {
+	zm.buf = buffer
+	zm.header = header
+	zm.ip = uint32(header.ip)
+	zm.stack = NewStack()
+	zm.startState = zm.Serialize()
 }
 
 type SerializableHeader struct {
