@@ -60,13 +60,23 @@ func NewStack() *ZStack {
 }
 
 type ZMachine struct {
-	ip         uint32
-	header     ZHeader
-	buf        []uint8
-	stack      *ZStack
-	localFrame uint16
-	Done       bool
-	startState string
+	ip          uint32
+	header      ZHeader
+	buf         []uint8
+	stack       *ZStack
+	localFrame  uint16
+	Done        bool
+	startState  string
+	textAddress uint16
+	maxChars    uint16
+	TextGetter  func(func(string))
+	textInput   ZTextInput
+}
+
+type ZTextInput struct {
+	textAddress  uint16
+	maxChars     uint16
+	parseAddress uint32
 }
 
 type ZFunction func(*ZMachine, []uint16, uint16)
@@ -588,10 +598,22 @@ func ZRead(zm *ZMachine, args []uint16, numArgs uint16) {
 		panic("Invalid max chars")
 	}
 	maxChars--
+	zm.wantsText(textAddress, maxChars, uint32(args[1]))
+}
 
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
+func (zm *ZMachine) wantsText(textAddress, maxChars uint16, parseAddress uint32) {
+	zm.textInput = ZTextInput{
+		textAddress:  textAddress,
+		maxChars:     maxChars,
+		parseAddress: parseAddress,
+	}
+	zm.TextGetter(zm.GotText)
+}
 
+func (zm *ZMachine) GotText(input string) {
+	textAddress := zm.textInput.textAddress
+	maxChars := zm.textInput.maxChars
+	parseAddress := zm.textInput.parseAddress
 	input = strings.ToLower(input)
 	input = strings.Trim(input, "\r\n")
 
@@ -626,7 +648,6 @@ func ZRead(zm *ZMachine, args []uint16, numArgs uint16) {
 
 	// TODO: include other separators, not only spaces
 
-	parseAddress := uint32(args[1])
 	maxTokens := zm.buf[parseAddress]
 	//DebugPrintf("Max tokens: %d\n", maxTokens)
 	parseAddress++
@@ -1350,6 +1371,11 @@ func (zm *ZMachine) Initialize(buffer []uint8, header ZHeader) {
 	zm.ip = uint32(header.ip)
 	zm.stack = NewStack()
 	zm.startState = zm.Serialize()
+	zm.TextGetter = func(fn func(string)) {
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		fn(input)
+	}
 }
 
 type SerializableHeader struct {
@@ -1369,14 +1395,21 @@ type SerializableStack struct {
 	LocalFrame int      `json:"local_frame"`
 }
 
+type SerializableTextInput struct {
+	TextAddress  uint16 `json:"text_address"`
+	MaxChars     uint16 `json:"max_chars"`
+	ParseAddress uint32 `json:"parse_address"`
+}
+
 type ZMSerializer struct {
-	Ip         uint32             `json:"ip"`
-	Header     SerializableHeader `json:"header"`
-	Buf        []uint8            `json:"buf"`
-	Stack      SerializableStack  `json:"stack"`
-	LocalFrame uint16             `json:"local_frame"`
-	Done       bool               `json:"done"`
-	StartState string             `json:"start_state"`
+	Ip         uint32                `json:"ip"`
+	Header     SerializableHeader    `json:"header"`
+	Buf        []uint8               `json:"buf"`
+	Stack      SerializableStack     `json:"stack"`
+	LocalFrame uint16                `json:"local_frame"`
+	Done       bool                  `json:"done"`
+	StartState string                `json:"start_state"`
+	TextInput  SerializableTextInput `json:"text_input"`
 }
 
 func (zm *ZMachine) Serialize() string {
@@ -1401,6 +1434,11 @@ func (zm *ZMachine) Serialize() string {
 		LocalFrame: zm.localFrame,
 		Done:       zm.Done,
 		StartState: zm.startState,
+		TextInput: SerializableTextInput{
+			TextAddress:  zm.textInput.textAddress,
+			MaxChars:     zm.textInput.maxChars,
+			ParseAddress: zm.textInput.parseAddress,
+		},
 	}
 	bytes, _ := json.Marshal(serializer)
 	return string(bytes)
@@ -1432,6 +1470,11 @@ func (zm *ZMachine) Deserialize(s string) {
 	zm.localFrame = sz.LocalFrame
 	zm.Done = sz.Done
 	zm.startState = sz.StartState
+	zm.textInput = ZTextInput{
+		textAddress:  sz.TextInput.TextAddress,
+		maxChars:     sz.TextInput.MaxChars,
+		parseAddress: sz.TextInput.ParseAddress,
+	}
 }
 
 // Return DICT_NOT_FOUND (= 0) if not found
