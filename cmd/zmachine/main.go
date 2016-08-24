@@ -1,22 +1,23 @@
 package main
 
 import (
-	"fmt"
+	"encoding/base64"
 	"github.com/reillywatson/zmachine"
 	"io/ioutil"
 	"os"
 )
 
 func main() {
+	var buffer []byte
+	var err error
 	if len(os.Args) != 2 {
-		fmt.Println("Usage: zmachine <filename>")
-		os.Exit(1)
+		buffer, err = base64.StdEncoding.DecodeString(zmachine.Zork)
+	} else {
+		buffer, err = ioutil.ReadFile(os.Args[1])
 	}
-	buffer, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
-
 	var header zmachine.ZHeader
 	header.Read(buffer)
 
