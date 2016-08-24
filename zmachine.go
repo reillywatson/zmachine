@@ -3,6 +3,7 @@ package zmachine
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -1343,6 +1344,85 @@ func (zm *ZMachine) Initialize(buffer []uint8, header ZHeader) {
 	zm.stack = NewStack()
 
 	//zm.TestDictionary()
+}
+
+type SerializableHeader struct {
+	Version           uint8  `json:"version"`
+	HiMemBase         uint16 `json:"hi_mem_base"`
+	Ip                uint16 `json:"ip"`
+	DictAddress       uint32 `json:"dict_address"`
+	ObjTableAddress   uint32 `json:"obj_table_address"`
+	GlobalVarAddress  uint32 `json:"global_var_address"`
+	StaticMemAddress  uint32 `json:"static_mem_address"`
+	AbbreviationTable uint32 `json:"abbrev_table"`
+}
+
+type SerializableStack struct {
+	Stack      []uint16 `json:"stack"`
+	Top        int      `json:"top"`
+	LocalFrame int      `json:"local_frame"`
+}
+
+type ZMSerializer struct {
+	Ip         uint32             `json:"ip"`
+	Header     SerializableHeader `json:"header"`
+	Buf        []uint8            `json:"buf"`
+	Stack      SerializableStack  `json:"stack"`
+	LocalFrame uint16             `json:"local_frame"`
+	Done       bool               `json:"done"`
+}
+
+func (zm *ZMachine) Serialize() string {
+	serializer := ZMSerializer{
+		Ip: zm.ip,
+		Header: SerializableHeader{
+			Version:           zm.header.Version,
+			HiMemBase:         zm.header.hiMemBase,
+			Ip:                zm.header.ip,
+			DictAddress:       zm.header.dictAddress,
+			ObjTableAddress:   zm.header.objTableAddress,
+			GlobalVarAddress:  zm.header.globalVarAddress,
+			StaticMemAddress:  zm.header.staticMemAddress,
+			AbbreviationTable: zm.header.abbreviationTable,
+		},
+		Buf: zm.buf,
+		Stack: SerializableStack{
+			Stack:      zm.stack.stack,
+			Top:        zm.stack.top,
+			LocalFrame: zm.stack.localFrame,
+		},
+		LocalFrame: zm.localFrame,
+		Done:       zm.Done,
+	}
+	bytes, _ := json.Marshal(serializer)
+	return string(bytes)
+}
+
+func (zm *ZMachine) Deserialize(s string) {
+	var sz ZMSerializer
+	err := json.Unmarshal([]byte(s), &sz)
+	if err != nil {
+		return
+	}
+	zm.ip = sz.Ip
+	zm.header = ZHeader{
+		Version:           sz.Header.Version,
+		hiMemBase:         sz.Header.HiMemBase,
+		ip:                sz.Header.Ip,
+		dictAddress:       sz.Header.DictAddress,
+		objTableAddress:   sz.Header.ObjTableAddress,
+		globalVarAddress:  sz.Header.GlobalVarAddress,
+		staticMemAddress:  sz.Header.StaticMemAddress,
+		abbreviationTable: sz.Header.AbbreviationTable,
+	}
+	zm.buf = sz.Buf
+	zm.stack = &ZStack{
+		stack:      sz.Stack.Stack,
+		top:        sz.Stack.Top,
+		localFrame: sz.Stack.LocalFrame,
+	}
+	zm.localFrame = sz.LocalFrame
+	zm.Done = sz.Done
 }
 
 // Return DICT_NOT_FOUND (= 0) if not found
