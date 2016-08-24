@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -71,6 +72,7 @@ type ZMachine struct {
 	maxChars    uint16
 	TextGetter  func(func(string))
 	textInput   ZTextInput
+	Output      io.Writer
 }
 
 type ZTextInput struct {
@@ -680,11 +682,11 @@ func (zm *ZMachine) GotText(input string) {
 
 func ZPrintChar(zm *ZMachine, args []uint16, numArgs uint16) {
 	ch := args[0]
-	PrintZChar(ch)
+	PrintZChar(zm, ch)
 }
 
 func ZPrintNum(zm *ZMachine, args []uint16, numArgs uint16) {
-	fmt.Printf("%d", int16(args[0]))
+	fmt.Fprintf(zm.Output, "%d", int16(args[0]))
 }
 
 // If range is positive, returns a uniformly random number between 1 and range.
@@ -718,12 +720,12 @@ func ZPull(zm *ZMachine, args []uint16, numArgs uint16) {
 }
 
 func ZNOP_VAR(zm *ZMachine, args []uint16, numArgs uint16) {
-	fmt.Printf("IP=0x%X\n", zm.ip)
+	fmt.Fprintf(zm.Output, "IP=0x%X\n", zm.ip)
 	//panic("NOP VAR")
 }
 
 func ZNOP(zm *ZMachine, args []uint16) {
-	fmt.Printf("IP=0x%X\n", zm.ip)
+	fmt.Fprintf(zm.Output, "IP=0x%X\n", zm.ip)
 	//panic("NOP 2OP")
 }
 
@@ -1020,7 +1022,7 @@ func ZJump(zm *ZMachine, arg uint16) {
 }
 
 func ZNOP1(zm *ZMachine, arg uint16) {
-	fmt.Printf("IP=0x%X\n", zm.ip)
+	fmt.Fprintf(zm.Output, "IP=0x%X\n", zm.ip)
 	ZReturnFalse(zm)
 }
 
@@ -1038,7 +1040,7 @@ func ZPrint(zm *ZMachine) {
 
 func ZPrintRet(zm *ZMachine) {
 	zm.ip = zm.DecodeZString(zm.ip)
-	fmt.Printf("\n")
+	fmt.Fprintf(zm.Output, "\n")
 	ZRet(zm, 1)
 }
 
@@ -1062,7 +1064,7 @@ func ZQuit(zm *ZMachine) {
 }
 
 func ZNewLine(zm *ZMachine) {
-	fmt.Printf("\n")
+	fmt.Fprintf(zm.Output, "\n")
 }
 
 func ZNOP0(zm *ZMachine) {
@@ -1376,6 +1378,7 @@ func (zm *ZMachine) Initialize(buffer []uint8, header ZHeader) {
 		input, _ := reader.ReadString('\n')
 		fn(input)
 	}
+	zm.Output = os.Stdout
 }
 
 type SerializableHeader struct {
@@ -1522,11 +1525,11 @@ func (zm *ZMachine) GetPropertyDefault(propertyIndex uint16) uint16 {
 	return GetUint16(zm.buf, zm.header.objTableAddress+uint32(propertyIndex*2))
 }
 
-func PrintZChar(ch uint16) {
+func PrintZChar(zm *ZMachine, ch uint16) {
 	if ch == 13 {
-		fmt.Printf("\n")
+		fmt.Fprintf(zm.Output, "\n")
 	} else if ch >= 32 && ch <= 126 { // ASCII
-		fmt.Printf("%c", ch)
+		fmt.Fprintf(zm.Output, "%c", ch)
 	} // else ... do not bother
 }
 
@@ -1583,7 +1586,7 @@ func (zm *ZMachine) DecodeZString(startOffset uint32) uint32 {
 		if alphabetType == 2 && zc == 6 {
 
 			zc10 := (uint16(zchars[i+1]) << 5) | uint16(zchars[i+2])
-			PrintZChar(zc10)
+			PrintZChar(zm, zc10)
 
 			i += 2
 
@@ -1592,11 +1595,11 @@ func (zm *ZMachine) DecodeZString(startOffset uint32) uint32 {
 		}
 
 		if zc == 0 {
-			fmt.Printf(" ")
+			fmt.Fprintf(zm.Output, " ")
 		} else {
 			// If we're here zc >= 6. Alphabet tables are indexed starting at 6
 			aindex := zc - 6
-			fmt.Printf("%c", alphabets[alphabetType][aindex])
+			fmt.Fprintf(zm.Output, "%c", alphabets[alphabetType][aindex])
 		}
 
 		alphabetType = 0
